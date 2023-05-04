@@ -3,12 +3,12 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
-#include <date/date.h>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include <date/date.h>
+#include <nlohmann/json.hpp>
 
 #include "internship.h"
 
@@ -17,43 +17,53 @@ using namespace date;
 
 namespace internship {
 
-    // OSEntry struct represents an item in the list of entries that will be
-    // displayed in the result
-    struct OSEntry {
-        std::string name;
-        std::string cycle;
-        int supportPeriod;
-    };
+    void solution(const std::string& jsonFileName, int elementsCount) {
+        const auto allOSEntries = readAllOSEntries(jsonFileName);
+        const auto solutionEntries = getSolutionEntries(std::move(allOSEntries), elementsCount);
 
-    namespace util {
-        std::optional<sys_days> toSysDays(const std::string& date) {
-            std::istringstream ss(date);
-            sys_days result;
-            ss >> date::parse("%F", result);
-            if (result == sys_days{}) {
-                // the date is not valid
-                return std::nullopt;
-            }
-            return result;
+        // print the solution
+        for (const auto& entry : solutionEntries) {
+            std::cout << entry.name << " " << entry.cycle << " " << entry.supportPeriod << '\n';
         }
+
+        std::cout << std::flush;
     }
 
     // calculateSupportPeriod calculates the support period from the release
     // date and eol date contained in the version json data
     std::optional<int> calculateSupportPeriod(const json &versionJson) {
-        if (!versionJson.contains("releaseDate") || !versionJson.contains("eol")) {
+        if (!versionJson.contains("releaseDate") || !(versionJson.contains("eol") || versionJson.contains("support"))) {
             return std::nullopt;
         }
 
-        if (!versionJson.at("releaseDate").is_string() || !versionJson.at("eol").is_string()) {
+        if (!versionJson.at("releaseDate").is_string()) {
             return std::nullopt;
         }
 
-        std::string releaseDateStr = versionJson.at("releaseDate");
-        std::string eolDateStr = versionJson.at("eol");
+        std::string startDateStr = versionJson.at("releaseDate");
+        std::string endDateStr;
 
-        auto startSysDays = util::toSysDays(releaseDateStr);
-        auto endSysDays = util::toSysDays(eolDateStr);
+        if (versionJson.contains("eol")) {
+            auto eolDate = versionJson.at("eol");
+            if (eolDate.is_string()) {
+                endDateStr = eolDate.get<std::string>();
+            }
+        }
+
+        // XXX if "eol" is not present, we try using "support" instead
+        if (endDateStr.empty() && versionJson.contains("support")) {
+            auto supportDate = versionJson.at("support");
+            if (supportDate.is_string() && !supportDate.empty()) {
+                endDateStr = supportDate.get<std::string>();
+            }
+        }
+
+        if (endDateStr.empty()) {
+            return std::nullopt;
+        }
+
+        auto startSysDays = util::toSysDays(startDateStr);
+        auto endSysDays = util::toSysDays(endDateStr);
 
         if (!startSysDays.has_value() || !endSysDays.has_value()) {
             return std::nullopt;
@@ -70,8 +80,10 @@ namespace internship {
         return daysDifference.count() + 1;
     }
 
+    // parseOSEntry parses the JSON of a version and returns a valid OSEntry
+    // or null if the JSON is invalid
     std::optional<OSEntry> parseOSEntry(const std::string name, const json& versionJson) {
-        if (!versionJson.contains("cycle") || !versionJson.at("cycle").is_string()) {
+        if (name.empty() || !versionJson.contains("cycle") || !versionJson.at("cycle").is_string()) {
             return std::nullopt;
         }
 
@@ -122,15 +134,6 @@ namespace internship {
         return osEntries;
     }
 
-    // readOSEntries reads the JSON file and returns parsed osEntries
-    std::vector<OSEntry> readAllOSEntries(const std::string& jsonFileName) {
-        std::vector<OSEntry> osEntries;
-        std::ifstream f(jsonFileName);
-        json data = json::parse(f);
-
-        return parseOSEntries(data);
-    }
-
     std::vector<OSEntry> getSolutionEntries(std::vector<OSEntry> allOSEntries, int elementsCount) {
         if (elementsCount > allOSEntries.size()) {
             elementsCount = allOSEntries.size();
@@ -150,16 +153,26 @@ namespace internship {
         return std::vector<OSEntry>(allOSEntries.begin(), allOSEntries.begin() + elementsCount);
     }
 
-    void solution(const std::string& jsonFileName, int elementsCount) {
-        
-        const auto allOSEntries = readAllOSEntries(jsonFileName);
-        const auto solutionEntries = getSolutionEntries(std::move(allOSEntries), elementsCount);
+    // readAllOSEntries reads the JSON file and returns parsed osEntries
+    std::vector<OSEntry> readAllOSEntries(const std::string& jsonFileName) {
+        std::vector<OSEntry> osEntries;
+        std::ifstream f(jsonFileName);
+        json data = json::parse(f);
 
-        // print the solution
-        for (const auto& entry : solutionEntries) {
-            std::cout << entry.name << " " << entry.cycle << " " << entry.supportPeriod << '\n';
-        }
-
-        std::cout << std::flush;
+        return parseOSEntries(data);
     }
+
+    namespace util {
+        std::optional<sys_days> toSysDays(const std::string& date) {
+            std::istringstream ss(date);
+            sys_days result;
+            ss >> date::parse("%F", result);
+            if (result == sys_days{}) {
+                // the date is not valid
+                return std::nullopt;
+            }
+            return result;
+        }
+    }
+
 }
