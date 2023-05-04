@@ -32,11 +32,7 @@ namespace internship {
     // calculateSupportPeriod calculates the support period from the release
     // date and eol date contained in the version json data
     std::optional<int> calculateSupportPeriod(const json &versionJson) {
-        if (!versionJson.contains("releaseDate") || !(versionJson.contains("eol") || versionJson.contains("support"))) {
-            return std::nullopt;
-        }
-
-        if (!versionJson.at("releaseDate").is_string()) {
+        if (!versionJson.contains("releaseDate") || !versionJson.at("releaseDate").is_string()) {
             return std::nullopt;
         }
 
